@@ -1,8 +1,9 @@
 const express = require('express');
-const cors = require('cors');
 const app = express();
+const cors = require('cors');
+var jwt = require('jsonwebtoken');
 require('dotenv').config()
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 3000;
 
 // Middleware 
@@ -27,12 +28,93 @@ async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
+
+        const artsCollection = client.db('ApexArtistry').collection('arts');
+        const usersCollection = client.db('ApexArtistry').collection('users');
+
+        app.get('/arts', async (req, res) => {
+            const cursor = artsCollection.find();
+            const result = await cursor.toArray();
+            res.send(result)
+        })
+
+        // User Collections
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            const query = { email: user.email }
+            const existingUser = await usersCollection.findOne(query);
+            if (existingUser) {
+                return res.send({ message: 'user already exists', insertedId: null })
+            }
+            const result = await usersCollection.insertOne(user);
+            res.send(result);
+        })
+        // Middleware /Verify token 
+        const verifyToken = (req, res, next) => {
+            // console.log('inside verify token', req.headers);
+            if (!req.headers.authorization) {
+                return res.status(401).send({ message: 'forbidden access' })
+            }
+            const token = req.headers.authorization.split(' ')[1];
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+                if (err) {
+                    return res.status(401).send({ message: 'forbidden access' })
+                }
+                req.decoded = decoded;
+                next()
+            })
+
+            // next()
+        }
+        // Load Users from the database
+        app.get('/users', verifyToken, async (req, res) => {
+            // console.log(req.headers);
+            const result = await usersCollection.find().toArray();
+            res.send(result);
+        })
+        // Delete User from DataBase
+        app.delete('/users/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await usersCollection.deleteOne(query);
+            res.send(result);
+        })
+        // Update a user Role
+        app.patch('/users/admin/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) };
+            const updatedDoc = {
+                $set: {
+                    role: 'admin'
+                }
+            }
+            const result = await usersCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
+        app.get('/arts/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await artsCollection.findOne(query);
+            res.send(result);
+        })
+
+        // JWT related API
+        app.post('/jwt', async (req, res) => {
+            const user = req.body;
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+                expiresIn: '1h'
+            });
+            res.send({ token })
+        })
+
+
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
-        await client.close();
+        // await client.close();
     }
 }
 run().catch(console.dir);
