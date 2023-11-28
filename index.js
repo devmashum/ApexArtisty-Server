@@ -35,30 +35,6 @@ async function run() {
         const contactCollection = client.db('ApexArtistry').collection('contact');
         const contestCollection = client.db('ApexArtistry').collection('contest');
 
-        app.get('/arts', async (req, res) => {
-            const cursor = artsCollection.find();
-            const result = await cursor.toArray();
-            res.send(result)
-        })
-
-        // add contest from the creator 
-        app.post('/arts', async (req, res) => {
-            const newContest = req.body;
-            const result = await artsCollection.insertOne(newContest);
-            res.send(result)
-        })
-
-        // User Collections
-        app.post('/users', async (req, res) => {
-            const user = req.body;
-            const query = { email: user.email }
-            const existingUser = await usersCollection.findOne(query);
-            if (existingUser) {
-                return res.send({ message: 'user already exists', insertedId: null })
-            }
-            const result = await usersCollection.insertOne(user);
-            res.send(result);
-        })
 
         // Middleware /Verify token 
         const verifyToken = (req, res, next) => {
@@ -130,6 +106,60 @@ async function run() {
             }
             res.send({ creator })
         })
+
+        // get arts by the creator and show the arts in admin panel
+        app.get('/arts', async (req, res) => {
+            const cursor = artsCollection.find();
+            const result = await cursor.toArray();
+            res.send(result)
+        })
+        // get the submitted content from the arts for the specific creator 
+        app.get('/arts/creator', async (req, res) => {
+            const email = req.query.email;
+            const query = { email: email };
+            const result = await artsCollection.find(query).toArray();
+            res.send(result);
+        })
+        // delete a art from the admin panel
+        app.delete('/arts/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await artsCollection.deleteOne(query);
+            res.send(result);
+        })
+        // make a creator winner 
+        app.patch('/arts/winner/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) };
+            const updatedDoc = {
+                $set: {
+                    role: 'winner'
+                }
+            }
+            const result = await artsCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
+
+        // add contest from the creator 
+        app.post('/arts', async (req, res) => {
+            const newContest = req.body;
+            const result = await artsCollection.insertOne(newContest);
+            res.send(result)
+        })
+
+        // User Collections
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            const query = { email: user.email }
+            const existingUser = await usersCollection.findOne(query);
+            if (existingUser) {
+                return res.send({ message: 'user already exists', insertedId: null })
+            }
+            const result = await usersCollection.insertOne(user);
+            res.send(result);
+        })
+
 
         // Add to cart 
         app.post('/cart', async (req, res) => {
