@@ -3,11 +3,20 @@ const app = express();
 const cors = require('cors');
 var jwt = require('jsonwebtoken');
 require('dotenv').config()
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 3000;
 
 // Middleware 
-app.use(cors());
+app.use(cors({
+    origin: [
+
+        'https://apexartistry-47b43.web.app',
+        'https://apexartistry-47b43.firebaseapp.com'
+
+    ],
+}));
 app.use(express.json());
 
 
@@ -34,6 +43,43 @@ async function run() {
         const cartCollection = client.db('ApexArtistry').collection('cart');
         const contactCollection = client.db('ApexArtistry').collection('contact');
         const contestCollection = client.db('ApexArtistry').collection('contest');
+        const reviewsCollection = client.db('ApexArtistry').collection('reviews');
+        const paymentsCollection = client.db('ApexArtistry').collection('payments');
+
+        // Payment with Stripe
+        app.post("/create-payment-intent", async (req, res) => {
+            const { price } = req.body;
+            // stripe calculate the price in cent so * with 100
+            const amount = parseInt(price * 100);
+
+            // Create a PaymentIntent with the order amount and currency
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: [
+                    "card"
+                ]
+                // In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
+
+            });
+
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
+        });
+        // Post Payments data to database
+        app.post('/payments', async (req, res) => {
+            const payment = req.body;
+            const paymentResult = await paymentsCollection.insertOne(payment);
+            // carefully delete each item from the cart
+            const query = {
+                _id: {
+                    $in: payment.cartIds.map(id => new ObjectId(id))
+                }
+            };
+            const deleteResult = await cartCollection.deleteMany(query);
+            res.send({ paymentResult, deleteResult })
+        })
 
 
         // Middleware /Verify token 
@@ -92,6 +138,31 @@ async function run() {
             next()
         }
 
+
+        // app.get('/arts/:id', async (req, res) => {
+        //     const id = req.params.id;
+        //     const query = { _id: new ObjectId(id) };
+        //     const result = await artsCollection.findOne(query);
+        //     res.send(result);
+        // })
+        // get data from payments and show the data to payment history
+
+        // app.get('/payments/:email', async (req, res) => {
+        //     const query = { email: req.params.email };
+        //     if (req.params.email !== req.decoded.email) {
+        //         return res.status(403).send({ message: 'forbidden access' });
+        //     }
+        //     const result = await paymentsCollection.find(query).toArray();
+        //     res.send(result)
+
+        // })
+
+        app.get('/payments', async (req, res) => {
+            const email = req.query.email;
+            const query = { email: email };
+            const result = await paymentsCollection.find(query).toArray();
+            res.send(result);
+        })
         // Verify admin with email
         app.get('/users/creator/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
@@ -109,6 +180,11 @@ async function run() {
 
         // get arts by the creator and show the arts in admin panel
         app.get('/arts', async (req, res) => {
+            const cursor = artsCollection.find();
+            const result = await cursor.toArray();
+            res.send(result)
+        })
+        app.get('/arts/slider', async (req, res) => {
             const cursor = artsCollection.find();
             const result = await cursor.toArray();
             res.send(result)
@@ -254,7 +330,17 @@ async function run() {
             const result = await contestCollection.insertOne(newContest);
             res.send(result)
         })
+        // get contact Data from DataBank
+        app.get('/contact', async (req, res) => {
+            const result = await contactCollection.find().toArray();
+            res.send(result);
+        })
 
+        // get reviews from data 
+        app.get('/reviews', async (req, res) => {
+            const result = await reviewsCollection.find().toArray();
+            res.send(result);
+        })
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
