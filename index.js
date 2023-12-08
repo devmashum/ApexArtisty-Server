@@ -19,12 +19,9 @@ app.use(cors({
 }));
 app.use(express.json());
 
-
-
-
+// MongoDB connection
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.oqyepgg.mongodb.net/?retryWrites=true&w=majority`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -35,9 +32,9 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-        // Connect the client to the server	(optional starting in v4.7)
+        // Connect to MongoDb and setup Collections
         await client.connect();
-
+      
         const artsCollection = client.db('ApexArtistry').collection('arts');
         const usersCollection = client.db('ApexArtistry').collection('users');
         const cartCollection = client.db('ApexArtistry').collection('cart');
@@ -59,14 +56,12 @@ async function run() {
                 payment_method_types: [
                     "card"
                 ]
-                // In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
-
-            });
-
+             });
             res.send({
                 clientSecret: paymentIntent.client_secret,
             });
         });
+
         // Post Payments data to database
         app.post('/payments', async (req, res) => {
             const payment = req.body;
@@ -137,32 +132,14 @@ async function run() {
             }
             next()
         }
-
-
-        // app.get('/arts/:id', async (req, res) => {
-        //     const id = req.params.id;
-        //     const query = { _id: new ObjectId(id) };
-        //     const result = await artsCollection.findOne(query);
-        //     res.send(result);
-        // })
-        // get data from payments and show the data to payment history
-
-        // app.get('/payments/:email', async (req, res) => {
-        //     const query = { email: req.params.email };
-        //     if (req.params.email !== req.decoded.email) {
-        //         return res.status(403).send({ message: 'forbidden access' });
-        //     }
-        //     const result = await paymentsCollection.find(query).toArray();
-        //     res.send(result)
-
-        // })
-
+// Get payment to from the MongoDb
         app.get('/payments', async (req, res) => {
             const email = req.query.email;
             const query = { email: email };
             const result = await paymentsCollection.find(query).toArray();
             res.send(result);
         })
+
         // Verify admin with email
         app.get('/users/creator/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
@@ -189,6 +166,7 @@ async function run() {
             const result = await cursor.toArray();
             res.send(result)
         })
+
         // get the submitted content from the arts for the specific creator 
         app.get('/arts/creator', async (req, res) => {
             const email = req.query.email;
@@ -196,6 +174,7 @@ async function run() {
             const result = await artsCollection.find(query).toArray();
             res.send(result);
         })
+
         // delete a art from the admin panel
         app.delete('/arts/:id', async (req, res) => {
             const id = req.params.id;
@@ -203,6 +182,7 @@ async function run() {
             const result = await artsCollection.deleteOne(query);
             res.send(result);
         })
+
         // make a creator winner 
         app.patch('/arts/winner/:id', async (req, res) => {
             const id = req.params.id;
@@ -236,13 +216,13 @@ async function run() {
             res.send(result);
         })
 
-
         // Add to cart 
         app.post('/cart', async (req, res) => {
             const newItem = req.body;
             const result = await cartCollection.insertOne(newItem);
             res.send(result)
         })
+
         // get data from the cart
         app.get('/cart', async (req, res) => {
             const email = req.query.email;
@@ -250,6 +230,7 @@ async function run() {
             const result = await cartCollection.find(query).toArray();
             res.send(result);
         })
+
         // get cartId from cart Data
         app.get('/cart', async (req, res) => {
             const result = await cartCollection.find().toArray();
@@ -263,12 +244,14 @@ async function run() {
             const result = await cartCollection.deleteOne(query);
             res.send(result);
         })
+
         // Load Users from the database
         app.get('/users', verifyToken, async (req, res) => {
             // console.log(req.headers);
             const result = await usersCollection.find().toArray();
             res.send(result);
         })
+
         // Delete User from DataBase
         app.delete('/users/:id', async (req, res) => {
             const id = req.params.id;
@@ -276,6 +259,7 @@ async function run() {
             const result = await usersCollection.deleteOne(query);
             res.send(result);
         })
+
         // Update a user Role
         app.patch('/users/admin/:id', verifyToken, async (req, res) => {
             const id = req.params.id;
@@ -288,8 +272,8 @@ async function run() {
             const result = await usersCollection.updateOne(filter, updatedDoc);
             res.send(result);
         })
-        // update a user to creator
 
+        // update a user to creator
         app.patch('/users/creator/:id', async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
@@ -301,7 +285,8 @@ async function run() {
             const result = await usersCollection.updateOne(filter, updatedDoc);
             res.send(result);
         })
-        // 
+
+        // Get Arts data by ID
         app.get('/arts/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
@@ -324,12 +309,14 @@ async function run() {
             const result = await contactCollection.insertOne(newContact);
             res.send(result)
         })
+
         // Add all Contest to the database
         app.post('/contest', async (req, res) => {
             const newContest = req.body;
             const result = await contestCollection.insertOne(newContest);
             res.send(result)
         })
+
         // get contact Data from DataBank
         app.get('/contact', async (req, res) => {
             const result = await contactCollection.find().toArray();
